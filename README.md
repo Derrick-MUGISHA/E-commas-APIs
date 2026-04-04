@@ -66,9 +66,53 @@ node server.js
 
 ---
 
-## 🧪 Testing the API
+## 🧪 Testing and Reference
 
-For a comprehensive, step-by-step guide on how to test every single endpoint (including user registration, cart management, and order fulfillment), please refer to the **[Step-by-Step Testing Guide](./api_testing_step_by_step.md)**.
+For a comprehensive walkthrough, see the **[Step-by-Step Testing Guide](./api_testing_step_by_step.md)**.
+
+### 📖 API Quick Reference (JSON Data)
+
+Use these examples in **Swagger** or **Postman**. Comments indicate requirement levels.
+
+#### **1. Identity (Auth)**
+`POST /api/auth/users/register`
+```json
+{
+  "email": "user@example.com", // [Required]
+  "password": "password123", // [Required]
+  "role": "USER" // [Optional] - USER or SELLER
+}
+```
+
+#### **2. Categories (Admin)**
+`POST /api/categories`
+```json
+{
+  "name": "GAMING", // [Required]
+  "description": "Consoles and hardware" // [Optional]
+}
+```
+
+#### **3. Products (Admin)**
+`POST /api/admin/products`
+```json
+{
+  "name": "PS5 Pro", // [Required]
+  "categoryId": "PASTE_ID_HERE", // [Required]
+  "price": 699.99, // [Required]
+  "stock": 50, // [Required]
+  "brand": "Sony" // [Optional]
+}
+```
+
+#### **4. Direct Buy (User)**
+`POST /api/auth/orders/buy`
+```json
+{
+  "productId": "PASTE_ID_HERE", // [Required]
+  "quantity": 1 // [Required]
+}
+```
 
 ---
 
@@ -86,8 +130,3 @@ For a comprehensive, step-by-step guide on how to test every single endpoint (in
 ├── server.js             # Entry Point
 └── package.json          # Dependencies & Scripts
 ```
-
----
-
-## ⚖️ License
-ISC License. Built with ❤️ by Antigravity.
