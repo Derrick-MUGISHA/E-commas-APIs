@@ -2,6 +2,9 @@
 
 This document provides a systematic walkthrough to test the **E-comus Professional API** from a clean slate. Use it with **Swagger UI** ([http://localhost:3000/api-docs](http://localhost:3000/api-docs)) or **Postman**.
 
+> [!TIP]
+> **Running in Docker?** You can execute any of these commands inside your container by prefixing them with `docker compose exec app`. For example: `docker compose exec app npx prisma db push`.
+
 ---
 
 ## 🚦 Phase 1: Initial Health & Public Data

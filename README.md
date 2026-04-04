@@ -29,40 +29,31 @@ A professional-grade, production-ready REST API built with **Express.js**, **Pri
 
 ---
 
-## ⚙️ Initial Setup
+## 🐳 Docker Deployment
 
-### 1. Environment Configuration
-Create a `.env` file in the root directory:
-```env
-PORT=3000
-DATABASE_URL="mongodb+srv://..."
-JWT_SECRET="your_secure_secret"
+The E-comus API is fully containerized for scalable, professional deployment.
 
-# Cloudinary Integration
-CLOUDINARY_CLOUD_NAME="your_name"
-CLOUDINARY_API_KEY="your_key"
-CLOUDINARY_API_SECRET="your_secret"
-```
-
-### 2. Dependency Installation
+### 1. Build and Launch
+Run this command from the project root to build the image and start the service in the background:
 ```bash
-npm install
-npx prisma generate
+docker compose up --build -d
 ```
 
-### 3. Database Sync & Seeding
-This will reset your database and populate it with 50 professional template products across 5 categories.
+### 2. View Logs
+Monitor the application's output in real-time:
 ```bash
-npx prisma db push --force-reset
-node prisma/seed.js
+docker compose logs -f
 ```
 
-### 4. Start the Server
+### 3. Database Operations (Inside Container)
+To reset the database or run the professional seed script within the container:
 ```bash
-node server.js
+# Run Seeding
+docker compose exec app node prisma/seed.js
+
+# Reset Database
+docker compose exec app npx prisma db push --force-reset && docker compose exec app node prisma/seed.js
 ```
-- **API Docs**: [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
-- **Health Check**: [http://localhost:3000/health](http://localhost:3000/health)
 
 ---
 

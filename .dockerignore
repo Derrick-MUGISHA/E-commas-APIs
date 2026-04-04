@@ -1,9 +1,11 @@
 node_modules
 npm-debug.log
-.env
-.git
-.gitignore
-.idea
 Dockerfile
 docker-compose.yml
-/src/generated/prisma
+.git
+.env
+prisma/data
+api_test_results.md
+audit_script.sh
+*.png
+*.webp

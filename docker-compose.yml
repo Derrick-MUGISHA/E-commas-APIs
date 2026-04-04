@@ -1,17 +1,22 @@
 version: '3.8'
+
 services:
-  api:
+  app:
     build: .
+    container_name: ecomus-api-service
+    restart: always
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
-    # Mount the source code for development if desired
-    # volumes:
-    #   - .:/app
-    #   - /app/node_modules
-    restart: unless-stopped
+      - NODE_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # Optional: persistent storage for local assets if needed
+  uploads:

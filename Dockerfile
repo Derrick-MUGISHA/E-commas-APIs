@@ -1,29 +1,26 @@
-FROM node:20-alpine
+# Base image: Node.js 18 on Alpine Linux for a small footprint
+FROM node:18-alpine
 
-# Set working directory
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json first for better caching
+# Copy package management files to leverage layer caching
 COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy Prisma schema and config
 COPY prisma ./prisma/
-COPY prisma.config.ts ./
 
-# Generate Prisma client
+# Install dependencies and produce Prisma engines
+RUN npm install
 RUN npx prisma generate
 
-# Copy the rest of the application
+# Copy the rest of the application source code
 COPY . .
 
 # Expose the API port
 EXPOSE 3000
 
-# Set environment variables (these should ideally be passed in docker-compose or run command)
-ENV NODE_ENV=production
+# Metadata
+LABEL maintainer="Antigravity Dev Team"
+LABEL version="1.0.0"
 
-# Start the application
-CMD ["node", "server.js"]
+# Main entry point for the container
+CMD ["npm", "start"]
