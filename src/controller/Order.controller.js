@@ -77,7 +77,13 @@ const placeOrder = async (req, res, next) => {
     }
     const cart = await prisma.order.findFirst({
       where: { userId: req.user.id, status: 'CART' },
-      include: { items: { include: { variant: true } } },
+      include: { 
+        items: { 
+          include: { 
+            product: { select: { id: true, name: true, variants: true } } 
+          } 
+        } 
+      },
     });
 
     if (!cart || cart.items.length === 0) {
@@ -86,9 +92,15 @@ const placeOrder = async (req, res, next) => {
 
     // Stock validation
     for (const item of cart.items) {
-      if (item.variant.stock < item.quantity) {
-        return sendError(res, `Insufficient stock for SKU: ${item.variant.sku}.`, 400);
+      const variant = (item.product?.variants || []).find(v => v.id === item.variantId);
+      if (!variant) {
+        return sendError(res, `Variant not found for product ${item.product?.name}.`, 404);
       }
+      if (variant.stock < item.quantity) {
+        return sendError(res, `Insufficient stock for SKU: ${variant.sku}.`, 400);
+      }
+      // Attach variant to item for use in the transaction if needed (though it uses variantId there)
+      item.variant = variant; 
     }
 
     // Deduct stock + mark order PENDING in a transaction
