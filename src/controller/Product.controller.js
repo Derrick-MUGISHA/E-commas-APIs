@@ -1,17 +1,18 @@
 'use strict';
 
-const prisma = require('../config/prisma');
+const prisma = require('../config/db');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
+const { logAction } = require('../utils/logger');
 
 // ── Public ────────────────────────────────────────────────────────────────────
 
 const getProducts = async (req, res, next) => {
   try {
-    const { page = 1, limit = 12, category, brand, search, minPrice, maxPrice } = req.query;
+    const { page = 1, limit = 12, categoryId, brand, search, minPrice, maxPrice } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where = {};
-    if (category) where.category = category;
+    if (categoryId) where.categoryId = categoryId;
     if (brand) where.brand = { contains: brand, mode: 'insensitive' };
     if (search) {
       where.OR = [
@@ -19,15 +20,10 @@ const getProducts = async (req, res, next) => {
         { description: { contains: search, mode: 'insensitive' } },
       ];
     }
-    // Price filter via variants
     if (minPrice || maxPrice) {
-      where.variants = {
-        some: {
-          price: {
-            ...(minPrice && { gte: Number(minPrice) }),
-            ...(maxPrice && { lte: Number(maxPrice) }),
-          },
-        },
+      where.price = {
+        ...(minPrice && { gte: Number(minPrice) }),
+        ...(maxPrice && { lte: Number(maxPrice) }),
       };
     }
 
@@ -37,16 +33,18 @@ const getProducts = async (req, res, next) => {
         where,
         skip,
         take: Number(limit),
-        include: {
-          variants: { select: { id: true, color: true, size: true, price: true, stock: true, sku: true } },
-          images: { select: { id: true, url: true, format: true } },
-          _count: { select: { comments: true } },
-        },
+        include: { category: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
 
-    return sendPaginated(res, products, total, page, limit);
+    const separatedByPrice = {
+      under50: products.filter(p => p.price < 50),
+      between50And150: products.filter(p => p.price >= 50 && p.price <= 150),
+      over150: products.filter(p => p.price > 150),
+    };
+
+    return sendPaginated(res, { grouped: separatedByPrice, all: products }, total, page, limit);
   } catch (err) {
     next(err);
   }
@@ -54,29 +52,17 @@ const getProducts = async (req, res, next) => {
 
 const getProduct = async (req, res, next) => {
   try {
+    const { id } = req.params;
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) return sendError(res, 'Invalid product ID format.', 400);
+
     const product = await prisma.product.findUnique({
-      where: { id: req.params.id },
-      include: {
-        variants: { include: { images: true } },
-        images: true,
-        comments: {
-          where: { parentId: null },
-          include: {
-            user: { select: { id: true, email: true } },
-            replies: {
-              include: { user: { select: { id: true, email: true } } },
-            },
-            reactions: { select: { type: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
+      where: { id },
+      include: { category: { select: { name: true } } }
     });
 
     if (!product) return sendError(res, 'Product not found.', 404);
 
-    // Compute average rating
-    const ratings = product.comments.filter((c) => c.rating !== null).map((c) => c.rating);
+    const ratings = (product.comments || []).filter((c) => c.rating !== null).map((c) => c.rating);
     const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
 
     return sendSuccess(res, { product: { ...product, avgRating } }, 'Product fetched.');
@@ -85,17 +71,25 @@ const getProduct = async (req, res, next) => {
   }
 };
 
-const getCategories = async (req, res, next) => {
+const getProductsByCategory = async (req, res, next) => {
   try {
-    const categories = ['ELECTRONICS', 'FASHION', 'HOME', 'BEAUTY', 'SPORTS'];
-    const counts = await Promise.all(
-      categories.map(async (cat) => ({
-        category: cat,
-        count: await prisma.product.count({ where: { category: cat } }),
-      }))
-    );
-    return sendSuccess(res, { categories: counts }, 'Categories fetched.');
-  } catch (err) {
+    const { categoryId } = req.params;
+    const { page = 1, limit = 12 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [total, products] = await Promise.all([
+      prisma.product.count({ where: { categoryId } }),
+      prisma.product.findMany({
+        where: { categoryId },
+        skip,
+        take: Number(limit),
+        include: { category: { select: { name: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return sendPaginated(res, products, total, page, limit);
+  } catch(err) {
     next(err);
   }
 };
@@ -104,10 +98,22 @@ const getCategories = async (req, res, next) => {
 
 const createProduct = async (req, res, next) => {
   try {
-    const { name, description, category, brand } = req.body;
+    const { name, description, categoryId, brand, price, stock, variants, images } = req.body;
+
+    const categoryExists = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!categoryExists) return sendError(res, 'Specified category does not exist.', 400);
+
     const product = await prisma.product.create({
-      data: { name, description, category, brand },
+      data: { 
+        name, description, categoryId, brand, 
+        price: Number(price), stock: Number(stock),
+        variants: variants || [],
+        images: images || [],
+        comments: []
+      },
     });
+
+    await logAction('CREATE_PRODUCT', product.id, req.user.id);
     return sendSuccess(res, { product }, 'Product created.', 201);
   } catch (err) {
     next(err);
@@ -116,24 +122,79 @@ const createProduct = async (req, res, next) => {
 
 const updateProduct = async (req, res, next) => {
   try {
-    const { name, description, category, brand } = req.body;
+    const { id } = req.params;
+    const { name, description, categoryId, brand, price, stock, variants, images } = req.body;
+    
+    if (categoryId) {
+      const categoryExists = await prisma.category.findUnique({ where: { id: categoryId } });
+      if (!categoryExists) return sendError(res, 'Specified category does not exist.', 400);
+    }
+
+    const dataToUpdate = { name, description, categoryId, brand };
+    if (price !== undefined) dataToUpdate.price = Number(price);
+    if (stock !== undefined) dataToUpdate.stock = Number(stock);
+    if (variants !== undefined) dataToUpdate.variants = variants;
+    if (images !== undefined) dataToUpdate.images = images;
+
     const product = await prisma.product.update({
-      where: { id: req.params.id },
-      data: { name, description, category, brand },
+      where: { id },
+      data: dataToUpdate,
     });
+
+    await logAction('UPDATE_PRODUCT', product.id, req.user.id);
     return sendSuccess(res, { product }, 'Product updated.');
   } catch (err) {
+    if (err.code === 'P2025') return sendError(res, 'Product not found.', 404);
     next(err);
   }
 };
 
 const deleteProduct = async (req, res, next) => {
   try {
-    await prisma.product.delete({ where: { id: req.params.id } });
+    const { id } = req.params;
+    await prisma.product.delete({ where: { id } });
+
+    await logAction('DELETE_PRODUCT', id, req.user.id);
     return sendSuccess(res, {}, 'Product deleted.');
+  } catch (err) {
+    if (err.code === 'P2025') return sendError(res, 'Product not found.', 404);
+    next(err);
+  }
+};
+
+const uploadProductImages = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return sendError(res, 'Product not found.', 404);
+
+    if (!req.files || req.files.length === 0) {
+      return sendError(res, 'No valid image files provided.', 400);
+    }
+
+    // Cloudinary URLs are in file.path
+    const imagesData = req.files.map(f => ({
+      url: f.path, // This is the Cloudinary URL
+      format: f.mimetype.split('/')[1].toUpperCase(),
+      size: f.size,
+      createdAt: new Date()
+    }));
+
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: {
+        images: { push: imagesData }
+      }
+    });
+
+    await logAction('UPLOAD_PRODUCT_IMAGES', id, req.user.id);
+    return sendSuccess(res, { product: updatedProduct }, 'Images uploaded to Cloudinary.', 201);
   } catch (err) {
     next(err);
   }
 };
 
-module.exports = { getProducts, getProduct, getCategories, createProduct, updateProduct, deleteProduct };
+module.exports = { 
+  getProducts, getProduct, getProductsByCategory, 
+  createProduct, updateProduct, deleteProduct, uploadProductImages 
+};

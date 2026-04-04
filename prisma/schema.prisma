@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -12,12 +13,21 @@ enum Role {
   SELLER
 }
 
-enum Category {
-  ELECTRONICS
-  FASHION
-  HOME
-  BEAUTY
-  SPORTS
+model Category {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  description String?
+  products    Product[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Log {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  action    String   // e.g. "CREATE_PRODUCT", "UPDATE_CATEGORY"
+  target    String   // ID of the target object
+  userId    String   @db.ObjectId
+  timestamp DateTime @default(now())
 }
 
 enum ReactionType {
@@ -41,9 +51,6 @@ model User {
   role     Role   @default(USER)
 
   orders    Order[]
-  comments  Comment[]
-  reactions CommentReaction[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -52,87 +59,65 @@ model Product {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
-  category    Category
+  
+  categoryId  String   @db.ObjectId
+  category    Category @relation(fields: [categoryId], references: [id])
+  
   brand       String?
 
-  variants Variant[]
-  images   File[]
-  comments Comment[]
+  price       Float    @default(0)
+  stock       Int      @default(0)
+  orderCount  Int      @default(0)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Variant {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  productId String  @db.ObjectId
-  product   Product @relation(fields: [productId], references: [id])
-
-  color String
-  size  String?
-  sku   String  @unique
-
-  price Float
-  stock Int
-
+  variants   Variant[]
   images     File[]
+  comments   Comment[]
   orderItems OrderItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model File {
-  id     String    @id @default(auto()) @map("_id") @db.ObjectId
+type Variant {
+  id    String @default(uuid())
+  color String
+  size  String?
+  sku   String
+  price Float
+  stock Int
+  images File[]
+  createdAt DateTime @default(now())
+}
+
+type File {
   url    String
   format ImageType
   size   Int
-
-  productId String?  @db.ObjectId
-  product   Product? @relation(fields: [productId], references: [id])
-
-  variantId String?  @db.ObjectId
-  variant   Variant? @relation(fields: [variantId], references: [id])
-
   createdAt DateTime @default(now())
 }
 
-model Comment {
-  id      String @id @default(auto()) @map("_id") @db.ObjectId
-  content String
-  rating  Int?
-
-  userId String @db.ObjectId
-  user   User   @relation(fields: [userId], references: [id])
-
-  productId String  @db.ObjectId
-  product   Product @relation(fields: [productId], references: [id])
-
+type Comment {
+  id        String   @default(uuid())
+  content   String
+  rating    Int?
+  userId    String   @db.ObjectId
   reactions CommentReaction[]
-
-  parentId String?   @db.ObjectId
-  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  replies  Comment[] @relation("CommentReplies")
-
+  replies   CommentReply[]
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
-model CommentReaction {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  userId String @db.ObjectId
-  user   User   @relation(fields: [userId], references: [id])
-
-  commentId String  @db.ObjectId
-  comment   Comment @relation(fields: [commentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  type ReactionType
-
+type CommentReply {
+  id        String   @default(uuid())
+  content   String
+  userId    String   @db.ObjectId
   createdAt DateTime @default(now())
+}
 
-  @@unique([userId, commentId])
+type CommentReaction {
+  id        String   @default(uuid())
+  userId    String   @db.ObjectId
+  type      ReactionType
+  createdAt DateTime @default(now())
 }
 
 model Order {
@@ -154,8 +139,10 @@ model OrderItem {
   orderId String @db.ObjectId
   order   Order  @relation(fields: [orderId], references: [id])
 
-  variantId String  @db.ObjectId
-  variant   Variant @relation(fields: [variantId], references: [id])
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+
+  variantId String? // Just a string now since Variant is a composite type embedded inside Product
 
   quantity Int
   price    Float

@@ -2,7 +2,7 @@
 
 const { verifyToken } = require('../utils/jwt');
 const { sendError } = require('../utils/response');
-const prisma = require('../config/prisma');
+const prisma = require('../config/db');
 
 const authenticate = async (req, res, next) => {
   try {

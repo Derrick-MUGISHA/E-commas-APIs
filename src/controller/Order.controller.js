@@ -1,7 +1,70 @@
 'use strict';
 
-const prisma = require('../config/prisma');
+const prisma = require('../config/db');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
+const { logAction } = require('../utils/logger');
+
+// POST /api/auth/orders/buy — skip cart entirely
+const buy = async (req, res, next) => {
+  try {
+    const { productId, quantity } = req.body;
+    const qty = Number(quantity) || 1;
+
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) return sendError(res, 'Product not found.', 404);
+    const order = await prisma.$transaction(async (tx) => {
+      const { variantId } = req.body;
+      let finalPrice = product.price;
+      
+      const updateData = {
+        orderCount: { increment: qty }
+      };
+
+      if (variantId) {
+        const variantIndex = (product.variants || []).findIndex(v => v.id === variantId);
+        if (variantIndex === -1) throw new Error('Variant not found.');
+        if (product.variants[variantIndex].stock < qty) throw new Error('Insufficient variant stock.');
+        
+        const updatedVariants = [...product.variants];
+        updatedVariants[variantIndex].stock -= qty;
+        updateData.variants = updatedVariants;
+        finalPrice = product.variants[variantIndex].price || product.price;
+      } else {
+        if (product.stock < qty) throw new Error('Insufficient product stock.');
+        updateData.stock = { decrement: qty };
+      }
+
+      await tx.product.update({
+        where: { id: productId },
+        data: updateData,
+      });
+
+      // Create PENDING order
+      return tx.order.create({
+        data: {
+          userId: req.user.id,
+          total: finalPrice * qty,
+          status: 'PENDING',
+          items: {
+            create: [
+              { productId, variantId: variantId || null, quantity: qty, price: finalPrice }
+            ]
+          }
+        },
+        include: {
+          items: {
+            include: { product: true },
+          },
+        },
+      });
+    });
+
+    await logAction('PLACE_DIRECT_ORDER', order.id, req.user.id);
+    return sendSuccess(res, { order }, 'Direct order placed successfully.', 201);
+  } catch (err) {
+    next(err);
+  }
+};
 
 // POST /api/orders  — convert cart → real order
 const placeOrder = async (req, res, next) => {
@@ -25,9 +88,23 @@ const placeOrder = async (req, res, next) => {
     // Deduct stock + mark order PENDING in a transaction
     const order = await prisma.$transaction(async (tx) => {
       for (const item of cart.items) {
-        await tx.variant.update({
-          where: { id: item.variantId },
-          data: { stock: { decrement: item.quantity } },
+        const product = await tx.product.findUnique({ where: { id: item.productId } });
+        if (!product) throw new Error(`Product ${item.productId} not found.`);
+
+        const variantIndex = product.variants.findIndex(v => v.id === item.variantId);
+        if (variantIndex === -1) throw new Error(`Variant ${item.variantId} not found.`);
+        if (product.variants[variantIndex].stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}.`);
+
+        // Update the variant stock inside the array
+        const updatedVariants = [...product.variants];
+        updatedVariants[variantIndex].stock -= item.quantity;
+
+        await tx.product.update({
+          where: { id: product.id },
+          data: { 
+            variants: updatedVariants,
+            orderCount: { increment: item.quantity }
+          },
         });
       }
 
@@ -37,13 +114,14 @@ const placeOrder = async (req, res, next) => {
         include: {
           items: {
             include: {
-              variant: { include: { product: { select: { name: true } } } },
+              product: { select: { id: true, name: true, variants: true } }
             },
           },
         },
       });
     });
 
+    await logAction('PLACE_CART_ORDER', order.id, req.user.id);
     return sendSuccess(res, { order }, 'Order placed successfully.', 201);
   } catch (err) {
     next(err);
@@ -67,7 +145,7 @@ const getMyOrders = async (req, res, next) => {
         take: Number(limit),
         include: {
           items: {
-            include: { variant: { include: { product: { select: { name: true, category: true } } } } },
+            include: { product: { select: { id: true, name: true, category: true, variants: true } } },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -89,12 +167,7 @@ const getOrder = async (req, res, next) => {
         user: { select: { id: true, email: true } },
         items: {
           include: {
-            variant: {
-              include: {
-                product: { select: { id: true, name: true, brand: true, category: true } },
-                images: { take: 1 },
-              },
-            },
+            product: { select: { id: true, name: true, brand: true, category: true, variants: true, images: true } }
           },
         },
       },
@@ -128,14 +201,26 @@ const updateOrderStatus = async (req, res, next) => {
     // If cancelling, restock items
     if (status === 'CANCELLED' && order.status !== 'CANCELLED') {
       const items = await prisma.orderItem.findMany({ where: { orderId: order.id } });
-      await prisma.$transaction(
-        items.map((item) =>
-          prisma.variant.update({
-            where: { id: item.variantId },
-            data: { stock: { increment: item.quantity } },
-          })
-        )
-      );
+      await prisma.$transaction(async (tx) => {
+        for (const item of items) {
+          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          if (!product) continue;
+
+          const variantIndex = product.variants.findIndex(v => v.id === item.variantId);
+          if (variantIndex === -1) continue;
+
+          const updatedVariants = [...product.variants];
+          updatedVariants[variantIndex].stock += item.quantity;
+
+          await tx.product.update({
+            where: { id: product.id },
+            data: { 
+              variants: updatedVariants,
+              orderCount: { decrement: item.quantity }
+            }
+          });
+        }
+      });
     }
 
     const updated = await prisma.order.update({
@@ -143,6 +228,7 @@ const updateOrderStatus = async (req, res, next) => {
       data: { status },
     });
 
+    await logAction('UPDATE_ORDER_STATUS', updated.id, req.user.id);
     return sendSuccess(res, { order: updated }, 'Order status updated.');
   } catch (err) {
     next(err);
@@ -167,7 +253,7 @@ const getAllOrders = async (req, res, next) => {
         take: Number(limit),
         include: {
           user: { select: { id: true, email: true } },
-          items: { include: { variant: { select: { sku: true, price: true } } } },
+          items: { include: { product: { select: { name: true, price: true, variants: true } } } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -179,4 +265,4 @@ const getAllOrders = async (req, res, next) => {
   }
 };
 
-module.exports = { placeOrder, getMyOrders, getOrder, updateOrderStatus, getAllOrders };
+module.exports = { buy, placeOrder, getMyOrders, getOrder, updateOrderStatus, getAllOrders };

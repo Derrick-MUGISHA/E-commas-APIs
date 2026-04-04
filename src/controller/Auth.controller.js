@@ -1,7 +1,7 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
-const prisma = require('../config/prisma');
+const prisma = require('../config/db');
 const { generateToken } = require('../utils/jwt');
 const { sendSuccess, sendError } = require('../utils/response');
 
@@ -21,10 +21,7 @@ const register = async (req, res, next) => {
       data: { email, password: hashedPassword, role: userRole },
     });
 
-    const token = generateToken({ id: user.id, email: user.email, role: user.role });
-
     return sendSuccess(res, {
-      token,
       user: { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt },
     }, 'Registration successful.', 201);
   } catch (err) {
@@ -65,21 +62,4 @@ const getMe = async (req, res, next) => {
   }
 };
 
-const changePassword = async (req, res, next) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-    const valid = await bcrypt.compare(currentPassword, user.password);
-    if (!valid) return sendError(res, 'Current password is incorrect.', 400);
-
-    const hashed = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { id: req.user.id }, data: { password: hashed } });
-
-    return sendSuccess(res, {}, 'Password changed successfully.');
-  } catch (err) {
-    next(err);
-  }
-};
-
-module.exports = { register, login, getMe, changePassword };
+module.exports = { register, login, getMe };

@@ -1,18 +1,18 @@
 'use strict';
 
 const express = require('express');
-const { body } = require('express-validator');
-const { register, login, getMe, changePassword } = require('../controller/Auth.controller');
+const { register, login, getMe } = require('../controller/Auth.controller');
 const { authenticate } = require('../middleware/Auth.middleware');
-const { validate } = require('../middleware/Validate.middleware');
+const { validateSchema } = require('../middleware/Zod.middleware');
+const { registerSchema, loginSchema } = require('../validations/schemas');
 
 const router = express.Router();
 
 /**
  * @swagger
- * /api/auth/register:
+ * /api/auth/users/register:
  *   post:
- *     tags: [Auth]
+ *     tags: [Open Routes]
  *     summary: Register a new user
  *     description: Create a new account. Role defaults to USER. SELLER can be self-registered; ADMIN must be assigned by an existing admin.
  *     requestBody:
@@ -46,18 +46,13 @@ const router = express.Router();
  */
 router.post(
   '/register',
-  [
-    body('email').isEmail().withMessage('Valid email required.'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
-    body('role').optional().isIn(['USER', 'SELLER']).withMessage('Role must be USER or SELLER.'),
-  ],
-  validate,
+  validateSchema(registerSchema),
   register
 );
 
 /**
  * @swagger
- * /api/auth/login:
+ * /api/auth/users/login:
  *   post:
  *     tags: [Auth]
  *     summary: Login
@@ -87,79 +82,12 @@ router.post(
  */
 router.post(
   '/login',
-  [
-    body('email').isEmail().withMessage('Valid email required.'),
-    body('password').notEmpty().withMessage('Password is required.'),
-  ],
-  validate,
+  validateSchema(loginSchema),
   login
 );
 
-/**
- * @swagger
- * /api/auth/me:
- *   get:
- *     tags: [Auth]
- *     summary: Get current user profile
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Profile data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/User'
- *       401:
- *         description: Unauthenticated
- */
 router.get('/me', authenticate, getMe);
 
-/**
- * @swagger
- * /api/auth/change-password:
- *   patch:
- *     tags: [Auth]
- *     summary: Change password
- *     security:
- *       - BearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [currentPassword, newPassword]
- *             properties:
- *               currentPassword:
- *                 type: string
- *               newPassword:
- *                 type: string
- *                 minLength: 6
- *     responses:
- *       200:
- *         description: Password changed
- *       400:
- *         description: Current password incorrect
- *       401:
- *         description: Unauthenticated
- */
-router.patch(
-  '/change-password',
-  authenticate,
-  [
-    body('currentPassword').notEmpty().withMessage('Current password required.'),
-    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters.'),
-  ],
-  validate,
-  changePassword
-);
+
 
 module.exports = router;
