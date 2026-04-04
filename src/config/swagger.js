@@ -52,6 +52,23 @@ A professional-grade e-commerce backend featuring:
             password: { type: 'string', example: 'admin123' },
           },
         },
+        AuthResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            token: { type: 'string' },
+            user: { $ref: '#/components/schemas/User' },
+          },
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            email: { type: 'string' },
+            role: { type: 'string', enum: ['USER', 'ADMIN', 'SELLER'] },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
         // ── Product ──────────────────────────────
         ProductCreateRequest: {
           type: 'object',
@@ -65,6 +82,17 @@ A professional-grade e-commerce backend featuring:
             stock: { type: 'integer', example: 15 },
             variants: { type: 'array', items: { $ref: '#/components/schemas/Variant' } },
             images: { type: 'array', items: { $ref: '#/components/schemas/File' } }
+          },
+        },
+        ProductUpdateRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            categoryId: { type: 'string' },
+            brand: { type: 'string' },
+            price: { type: 'number' },
+            stock: { type: 'integer' },
           },
         },
         Product: {
@@ -161,13 +189,63 @@ A professional-grade e-commerce backend featuring:
             data: { type: 'object' },
           },
         },
+        ErrorResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: false },
+            message: { type: 'string' },
+            errors: { type: 'array', items: { type: 'object' } },
+          },
+        },
+        ProductSearchResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                grouped: {
+                  type: 'object',
+                  properties: {
+                    under50: { type: 'array', items: { $ref: '#/components/schemas/Product' } },
+                    between50And150: { type: 'array', items: { $ref: '#/components/schemas/Product' } },
+                    over150: { type: 'array', items: { $ref: '#/components/schemas/Product' } },
+                  }
+                },
+                total: { type: 'integer' },
+                all: { type: 'array', items: { $ref: '#/components/schemas/Product' } }
+              }
+            }
+          }
+        },
+        PaginatedResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            data: { type: 'array', items: { type: 'object' } },
+            pagination: {
+              type: 'object',
+              properties: {
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total: { type: 'integer' },
+                pages: { type: 'integer' },
+              },
+            },
+          },
+        },
       },
     },
     tags: [
+      { name: 'Admin Routes', description: 'Restricted administrative privileges' },
+      { name: 'User Routes', description: 'Authenticated actions for standard users' },
+      { name: 'Open Routes', description: 'Free-access public endpoints' },
+      { name: 'Auth', description: 'Identity management' },
       { name: 'Categories', description: 'Dynamic categorization' },
       { name: 'Products', description: 'Inventory management' },
       { name: 'Orders', description: 'Transaction processing' },
-      { name: 'Auth', description: 'Identity management' },
+      { name: 'Cart', description: 'Shopping cart' },
     ],
   },
   apis: ['./src/routes/*.js'],

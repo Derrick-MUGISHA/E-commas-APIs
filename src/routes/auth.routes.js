@@ -86,8 +86,27 @@ router.post(
   login
 );
 
+/**
+ * @swagger
+ * /api/auth/users/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Get current user profile
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 user: { $ref: '#/components/schemas/User' }
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/me', authenticate, getMe);
-
-
 
 module.exports = router;

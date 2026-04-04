@@ -7,6 +7,9 @@ const { logAction } = require('../utils/logger');
 // POST /api/auth/orders/buy — skip cart entirely
 const buy = async (req, res, next) => {
   try {
+    if (req.user.role === 'ADMIN') {
+      return sendError(res, 'Admins cannot place orders.', 403);
+    }
     const { productId, quantity } = req.body;
     const qty = Number(quantity) || 1;
 
@@ -69,6 +72,9 @@ const buy = async (req, res, next) => {
 // POST /api/orders  — convert cart → real order
 const placeOrder = async (req, res, next) => {
   try {
+    if (req.user.role === 'ADMIN') {
+      return sendError(res, 'Admins cannot place orders.', 403);
+    }
     const cart = await prisma.order.findFirst({
       where: { userId: req.user.id, status: 'CART' },
       include: { items: { include: { variant: true } } },

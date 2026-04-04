@@ -22,6 +22,30 @@ const router = express.Router();
  */
 router.get('/', getProducts);
 
+/**
+ * @swagger
+ * /api/public/products/category/{categoryId}:
+ *   get:
+ *     tags: [Open Routes]
+ *     summary: Get products by category
+ *     parameters:
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 12 }
+ *     responses:
+ *       200:
+ *         description: Success
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/PaginatedResponse' }
+ */
 router.get('/category/:categoryId', getProductsByCategory);
 
 /**

@@ -50,7 +50,7 @@ router.get('/', getCategories);
  *     summary: Create a new category (Admin)
  *     tags: [Categories]
  *     security:
- *       - bearerAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -76,7 +76,7 @@ router.post(
  *     summary: Update an existing category (Admin)
  *     tags: [Categories]
  *     security:
- *       - bearerAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -108,7 +108,7 @@ router.put(
  *     summary: Remove a category (Admin)
  *     tags: [Categories]
  *     security:
- *       - bearerAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
