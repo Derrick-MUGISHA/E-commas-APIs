@@ -4,10 +4,7 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-  url      = env("DATABASE_URL")
 }
-
-
 
 enum Role {
   USER
@@ -28,14 +25,20 @@ enum ReactionType {
   DISLIKE
 }
 
-
-
+enum ImageType {
+  PNG
+  JPG
+  JPEG
+  WEBP
+  GIF
+  SVG
+}
 
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  email    String @unique
+  password String
+  role     Role   @default(USER)
 
   orders    Order[]
   comments  Comment[]
@@ -45,123 +48,115 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
-
 model Product {
-  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
   category    Category
   brand       String?
 
-  variants    Variant[]
-  images      File[]
-  comments    Comment[]
+  variants Variant[]
+  images   File[]
+  comments Comment[]
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-
 model Variant {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  productId String   @db.ObjectId
-  product   Product  @relation(fields: [productId], references: [id])
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
 
-  color     String
-  size      String?
-  sku       String   @unique
+  color String
+  size  String?
+  sku   String  @unique
 
-  price     Float
-  stock     Int
+  price Float
+  stock Int
 
-  images    File[]
+  images     File[]
   orderItems OrderItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-
 model File {
-  id        String    @id @default(auto()) @map("_id") @db.ObjectId
-  url       String
-  format    ImageType
-  size      Int   
+  id     String    @id @default(auto()) @map("_id") @db.ObjectId
+  url    String
+  format ImageType
+  size   Int
 
-  productId String?   @db.ObjectId
-  product   Product?  @relation(fields: [productId], references: [id])
+  productId String?  @db.ObjectId
+  product   Product? @relation(fields: [productId], references: [id])
 
-  variantId String?   @db.ObjectId
-  variant   Variant?  @relation(fields: [variantId], references: [id])
+  variantId String?  @db.ObjectId
+  variant   Variant? @relation(fields: [variantId], references: [id])
 
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 }
 
-
 model Comment {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  content   String
-  rating    Int?
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  content String
+  rating  Int?
 
-  userId    String   @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id])
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
 
-  productId String   @db.ObjectId
-  product   Product  @relation(fields: [productId], references: [id])
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
 
   reactions CommentReaction[]
 
-  parentId  String?   @db.ObjectId
-  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies   Comment[] @relation("CommentReplies")
+  parentId String?   @db.ObjectId
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies  Comment[] @relation("CommentReplies")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model CommentReaction {
-  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  userId    String        @db.ObjectId
-  user      User          @relation(fields: [userId], references: [id])
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
 
-  commentId String        @db.ObjectId
-  comment   Comment       @relation(fields: [commentId], references: [id])
+  commentId String  @db.ObjectId
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  type      ReactionType
+  type ReactionType
 
-  createdAt DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([userId, commentId])
 }
 
 model Order {
-  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  userId    String      @db.ObjectId
-  user      User        @relation(fields: [userId], references: [id])
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
 
-  items     OrderItem[]
-  total     Float
-  status    String      // PENDING, PAID, SHIPPED, etc.
+  items  OrderItem[]
+  total  Float
+  status String // PENDING, PAID, SHIPPED, etc.
 
-  createdAt DateTime    @default(now())
+  createdAt DateTime @default(now())
 }
 
-//
-// ORDER ITEM
-//
-
 model OrderItem {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  orderId   String   @db.ObjectId
-  order     Order    @relation(fields: [orderId], references: [id])
+  orderId String @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id])
 
-  variantId String   @db.ObjectId
-  variant   Variant  @relation(fields: [variantId], references: [id])
+  variantId String  @db.ObjectId
+  variant   Variant @relation(fields: [variantId], references: [id])
 
-  quantity  Int
-  price     Float
+  quantity Int
+  price    Float
 }
