@@ -1,75 +1,99 @@
+'use strict';
+
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 async function main() {
-  console.log('🚮 Clearing existing data...');
+  console.log('📡 Starting Secure Seeding Process...');
+
+  // 1. Load Admin Credentials from Environment
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@admin.com';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
+  
+  if (!process.env.SEED_ADMIN_EMAIL) {
+    console.warn('⚠️  SEED_ADMIN_EMAIL not set in .env. Using default.');
+  }
+
+  console.log('🚮 Clearing existing core data...');
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({});
   await prisma.product.deleteMany({});
   await prisma.category.deleteMany({});
+  // Log preservation depends on audit requirements, clearing for seed purity:
   await prisma.log.deleteMany({});
 
-  console.log('👥 Creating default users...');
-  
-  const adminEmail = 'admin@admin.com';
-  const hashedPassword = await bcrypt.hash('admin123', 12);
+  console.log('👥 Synchronizing Admin Account...');
+  const hashedAdminPassword = await bcrypt.hash(adminPassword, 12);
   
   await prisma.user.upsert({
     where: { email: adminEmail },
-    update: {},
+    update: { password: hashedAdminPassword },
     create: {
       email: adminEmail,
-      password: hashedPassword,
+      password: hashedAdminPassword,
       role: 'ADMIN',
     },
   });
-  console.log('✅ Created default admin (admin@admin.com / admin123)');
+  console.log(`✅ Admin account synchronized: ${adminEmail}`);
 
-  console.log('📂 Creating categories...');
-  const categoryNames = ['ELECTRONICS', 'FASHION', 'HOME', 'BEAUTY', 'SPORTS'];
-  const createdCategories = [];
-
-  for (const name of categoryNames) {
-    const cat = await prisma.category.create({
-      data: { 
-        name, 
-        description: `Everything related to ${name.toLowerCase()}` 
-      }
-    });
-    createdCategories.push(cat);
+  // 2. Load Categories from External JSON
+  const categoriesPath = path.join(__dirname, 'data', 'categories.json');
+  if (!fs.existsSync(categoriesPath)) {
+    throw new Error(`🛑 Categories data file not found at: ${categoriesPath}`);
   }
 
-  console.log('🛍️ Generating 50 template products...');
-  const brands = ['Sony', 'Nike', 'Samsung', 'Loreal', 'Adidas', 'Ikea', 'Apple', 'LG', 'Puma'];
+  const categoryData = JSON.parse(fs.readFileSync(categoriesPath, 'utf8'));
+  console.log(`📂 Seeding ${categoryData.length} professional categories...`);
 
-  for (let i = 1; i <= 50; i++) {
+  const createdCategories = [];
+  for (const cat of categoryData) {
+    const createdCat = await prisma.category.create({
+      data: {
+        name: cat.name,
+        description: cat.description
+      }
+    });
+    createdCategories.push(createdCat);
+  }
+  console.log(`✅ Categorization complete.`);
+
+  // 3. Generate 50 Template Products (Distributed across 50 categories)
+  console.log('🛍️ Generating 50 high-quality products...');
+  const brands = ['Sony', 'Nike', 'Samsung', 'Loreal', 'Adidas', 'Ikea', 'Apple', 'LG', 'Puma', 'Honda', 'Toyota'];
+
+  for (let i = 0; i < 50; i++) {
+    // Map each product to exactly one of the 50 categories sequentially
     const category = createdCategories[i % createdCategories.length];
     const brand = brands[i % brands.length];
+    const productName = `Professional ${category.name} ${brand} Model ${i + 1}`;
     
     await prisma.product.create({
       data: {
-        name: `Professional ${category.name} Item ${i}`,
-        description: `High-quality ${brand} product in the ${category.name} category. Pro-grade e-commerce item with full audit logging support.`,
+        name: productName,
+        description: `Premium ${brand} solution within the ${category.name} landscape. Engineered for production-scale e-commerce audits.`,
         categoryId: category.id,
         brand: brand,
-        price: Math.floor(Math.random() * 500) + 10,
-        stock: Math.floor(Math.random() * 100) + 1,
+        price: Number((Math.random() * (1000 - 10) + 10).toFixed(2)),
+        stock: Math.floor(Math.random() * 200) + 50,
         variants: [
-          { 
-            id: require('uuid').v4(),
-            color: 'Midnight Black', 
-            size: 'Standard', 
-            sku: `${brand.substring(0, 3).toUpperCase()}-${i}-BLK`, 
-            price: Math.floor(Math.random() * 500) + 10,
-            stock: 20
+          {
+            id: uuidv4(),
+            color: 'Professional Edition',
+            size: 'Standard',
+            sku: `PRO-${brand.substring(0, 3).toUpperCase()}-${i + 100}`,
+            price: Number((Math.random() * (1000 - 10) + 10).toFixed(2)),
+            stock: 25
           }
         ],
         images: [
-          { 
-            url: 'https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg', 
-            format: 'JPG', 
-            size: 1024 
+          {
+            url: 'https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg',
+            format: 'JPG',
+            size: 2048
           }
         ],
         orderCount: 0
@@ -77,12 +101,13 @@ async function main() {
     });
   }
 
-  console.log('🚀 Successfully seeded 50 products linked to new Category models!');
+  console.log('🚀 Seeding finished successfully!');
+  console.log(`📊 Summary:\n- 1 Admin\n- ${createdCategories.length} Categories\n- 50 Products`);
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('💥 Seeding failed:', e.message);
     process.exit(1);
   })
   .finally(async () => {
