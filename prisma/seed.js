@@ -11,8 +11,8 @@ async function main() {
   console.log('📡 Starting Secure Seeding Process...');
 
   // 1. Load Admin Credentials from Environment
-  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@admin.com';
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
+  const adminEmail = process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
   
   if (!process.env.SEED_ADMIN_EMAIL) {
     console.warn('⚠️  SEED_ADMIN_EMAIL not set in .env. Using default.');
